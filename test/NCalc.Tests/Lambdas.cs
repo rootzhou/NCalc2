@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using Xunit;
 
 namespace NCalc.Tests
@@ -125,6 +126,20 @@ namespace NCalc.Tests
         {
             var expression = new Expression(input);
             var sut = expression.ToLambda<int>();
+
+            Assert.Equal(sut(), expected);
+        }
+
+        [Theory]
+        [InlineData("'11'+'2'", "112")]
+        [InlineData("'11'+2", "112")]
+        [InlineData("1+'12'", "112")]
+
+        public void ShouldHandleString(string input, string expected)
+        {
+
+            var expression = new Expression(input);
+            var sut = expression.ToLambda<string>();
 
             Assert.Equal(sut(), expected);
         }
@@ -300,9 +315,15 @@ namespace NCalc.Tests
         [InlineData("Min(3,2)",2)]
         [InlineData("Min(3.2,6.3)", 3.2)]
         [InlineData("Max(2.6,9.6)", 9.6)]
-        [InlineData("Max(9,6)", 9.0)]
-        [InlineData("Pow(5,2)", 25)]
-        public void ShouldHandleNumericBuiltInFunctions(string input, double expected)
+        [InlineData("Max(9,6)", 9)]
+        [InlineData("Pow(5,2)", 25d)]
+        [InlineData("Round(5.134,2)", 5.13)]
+        [InlineData("Round(5.135,2)", 5.14)]
+        [InlineData("Abs(-1)", 1)]
+        [InlineData("Ceiling(1.3)", 2d)]
+        [InlineData("Floor(1.8)", 1d)]
+        [InlineData("Truncate(1.3)", 1d)]
+        public void ShouldHandleNumericBuiltInFunctions(string input, object expected)
         {
             var expression = new Expression(input);
             var sut = expression.ToLambda<object>();

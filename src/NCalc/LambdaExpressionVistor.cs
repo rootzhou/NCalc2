@@ -30,6 +30,32 @@ namespace NCalc
         private bool IgnoreCaseString { get { return (_options & EvaluateOptions.MatchStringsWithIgnoreCase) == EvaluateOptions.MatchStringsWithIgnoreCase; } }
         private bool Checked { get { return (_options & EvaluateOptions.OverflowProtection) == EvaluateOptions.OverflowProtection; } }
 
+
+        private static readonly MethodInfo _ceilingMethod;
+        private static readonly MethodInfo _truncateMethod;
+        private static readonly MethodInfo _floorMethod;
+        private static readonly MethodInfo _concatMethod;
+
+
+        static LambdaExpressionVistor()
+        {
+            var mathType = typeof(Math);
+            _concatMethod = GetMethodInfo(typeof(string), "Concat", new[] {typeof(object), typeof(object) });
+            _ceilingMethod = GetMethodInfo(mathType, "Ceiling", new Type[] {typeof(double)});
+            _truncateMethod = GetMethodInfo(mathType, "Truncate", new Type[] {typeof(double)});
+            _floorMethod = GetMethodInfo(mathType, "Floor", new Type[] {typeof(double)});
+        }
+
+        private static MethodInfo GetMethodInfo(Type type,string methodName, Type[] types)
+        {
+#if NETSTANDARD1_3
+            return type.GetRuntimeMethod(methodName, types);
+#else
+
+            return type.GetMethod(methodName, types);
+#endif
+        }
+
         public LambdaExpressionVistor(IDictionary<string, object> parameters, EvaluateOptions options)
         {
             _parameters = parameters;
@@ -102,8 +128,26 @@ namespace NCalc
                     else _result = WithCommonNumericType(left, right, L.Expression.Subtract);
                     break;
                 case BinaryExpressionType.Plus:
-                    if (Checked) _result = WithCommonNumericType(left, right, L.Expression.AddChecked);
-                    else _result = WithCommonNumericType(left, right, L.Expression.Add);
+                    if (left.Type == typeof(string) || right.Type == typeof(string))
+                    {
+                        var _left = left;
+                        var _right = right;
+                        if (left.Type != typeof(string))
+                        {
+                            _left = L.Expression.Convert(left, typeof(object));
+                        }
+
+                        if (right.Type != typeof(string))
+                        {
+                            _right = L.Expression.Convert(right, typeof(object));
+                        }
+                        _result = L.Expression.Call(_concatMethod, _left, _right);
+                    }
+                    else
+                    {
+                        if (Checked) _result = WithCommonNumericType(left, right, L.Expression.AddChecked);
+                        else _result = WithCommonNumericType(left, right, L.Expression.Add);
+                    }
                     break;
                 case BinaryExpressionType.Modulo:
                     _result = WithCommonNumericType(left, right, L.Expression.Modulo);
@@ -168,7 +212,8 @@ namespace NCalc
                 args[i] = _result;
             }
 
-            switch (function.Identifier.Name.ToLowerInvariant())
+            var funcName = function.Identifier.Name.ToLowerInvariant();
+            switch (funcName)
             {
                 case "if":
                     var numberTypePriority = new Type[] { typeof(double), typeof(float), typeof(long), typeof(int), typeof(short) };
@@ -184,25 +229,47 @@ namespace NCalc
                 case "in":
                     var items = L.Expression.NewArrayInit(args[0].Type,
                         new ArraySegment<L.Expression>(args, 1, args.Length - 1));
-                    var smi = typeof (Array).GetRuntimeMethod("IndexOf", new[] { typeof(Array), typeof(object) });
+                    var smi = typeof(Array).GetRuntimeMethod("IndexOf", new[] { typeof(Array), typeof(object) });
                     var r = L.Expression.Call(smi, L.Expression.Convert(items, typeof(Array)), L.Expression.Convert(args[0], typeof(object)));
                     _result = L.Expression.GreaterThanOrEqual(r, L.Expression.Constant(0));
                     break;
                 case "min":
-                    var min_arg0 = L.Expression.Convert(args[0], typeof(double));
-                    var min_arg1 = L.Expression.Convert(args[1], typeof(double));
-                    _result = L.Expression.Condition(L.Expression.LessThan(min_arg0, min_arg1), min_arg0, min_arg1);
-                    break;
                 case "max":
-                    var max_arg0 = L.Expression.Convert(args[0], typeof(double));
-                    var max_arg1 = L.Expression.Convert(args[1], typeof(double));
-                    _result = L.Expression.Condition(L.Expression.GreaterThan(max_arg0, max_arg1), max_arg0, max_arg1);
+                    var max_arg0 = args[0];
+                    var max_arg1 = args[1];
+                    if (max_arg1.Type != max_arg0.Type)
+                    {
+                        max_arg1 = L.Expression.Convert(max_arg1, max_arg0.Type);
+                    }
+                    var maxMethod = GetMethodInfo(typeof(Math),funcName == "min" ? "Min" : "Max", new Type[] { args[0].Type, args[0].Type });
+                    _result = L.Expression.Call(maxMethod, max_arg0, max_arg1);
                     break;
                 case "pow":
                     var pow_arg0 = L.Expression.Convert(args[0], typeof(double));
                     var pow_arg1 = L.Expression.Convert(args[1], typeof(double));
                     _result = L.Expression.Power(pow_arg0, pow_arg1);
                     break;
+                case "round":
+                    var round_arg0 = args[0];
+                    var round_arg1 = L.Expression.Convert(args[1], typeof(int));
+                    var round_method = GetMethodInfo(typeof(Math),"Round", new Type[] { args[0].Type, typeof(int) });
+                    _result = L.Expression.Call(round_method, round_arg0, round_arg1);
+                    break;
+                case "abs":
+                    var abs_args = args[0];
+                    var absMethod = GetMethodInfo(typeof(Math), "Abs", new Type[] {abs_args.Type});
+                    _result = L.Expression.Call(absMethod, abs_args);
+                    break;
+                case "ceiling":
+                case "truncate":
+                case "floor":
+                    var floor_args = L.Expression.Convert(args[0], typeof(double));
+                    var floor_method = funcName == "ceiling" ? _ceilingMethod : funcName == "truncate" ? _truncateMethod : _floorMethod;
+                    _result = L.Expression.Call(floor_method, floor_args);
+                    break;
+               
+
+                
                 default:
                     var mi = FindMethod(function.Identifier.Name, args);
                     _result = L.Expression.Call(_context, mi.BaseMethodInfo, mi.PreparedArguments);
