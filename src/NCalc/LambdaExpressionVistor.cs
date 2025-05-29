@@ -212,27 +212,35 @@ namespace NCalc
                 args[i] = _result;
             }
 
-            var funcName = function.Identifier.Name.ToLowerInvariant();
-            switch (funcName)
-            {
-                case "if":
-                    var numberTypePriority = new Type[] { typeof(double), typeof(float), typeof(long), typeof(int), typeof(short) };
-                    var index1 = Array.IndexOf(numberTypePriority, args[1].Type);
-                    var index2 = Array.IndexOf(numberTypePriority, args[2].Type);
-                    if (index1 >= 0 && index2 >= 0 && index1 != index2)
-                    {
-                        args[1] = L.Expression.Convert(args[1], numberTypePriority[Math.Min(index1, index2)]);
-                        args[2] = L.Expression.Convert(args[2], numberTypePriority[Math.Min(index1, index2)]);
-                    }
-                    _result = L.Expression.Condition(args[0], args[1], args[2]);
-                    break;
-                case "in":
-                    var items = L.Expression.NewArrayInit(args[0].Type,
+            string functionName = function.Identifier.Name.ToLowerInvariant();
+            if (functionName == "if") {
+                var numberTypePriority = new Type[] { typeof(double), typeof(float), typeof(long), typeof(int), typeof(short) };
+                var index1 = Array.IndexOf(numberTypePriority, args[1].Type);
+                var index2 = Array.IndexOf(numberTypePriority, args[2].Type);
+                if (index1 >= 0 && index2 >= 0 && index1 != index2) {
+                    args[1] = L.Expression.Convert(args[1], numberTypePriority[Math.Min(index1, index2)]);
+                    args[2] = L.Expression.Convert(args[2], numberTypePriority[Math.Min(index1, index2)]);
+                }
+                _result = L.Expression.Condition(args[0], args[1], args[2]);
+                return;
+            } else if (functionName == "in") {
+                var items = L.Expression.NewArrayInit(args[0].Type,
                         new ArraySegment<L.Expression>(args, 1, args.Length - 1));
-                    var smi = typeof(Array).GetRuntimeMethod("IndexOf", new[] { typeof(Array), typeof(object) });
-                    var r = L.Expression.Call(smi, L.Expression.Convert(items, typeof(Array)), L.Expression.Convert(args[0], typeof(object)));
-                    _result = L.Expression.GreaterThanOrEqual(r, L.Expression.Constant(0));
-                    break;
+                var smi = typeof(Array).GetRuntimeMethod("IndexOf", new[] { typeof(Array), typeof(object) });
+                var r = L.Expression.Call(smi, L.Expression.Convert(items, typeof(Array)), L.Expression.Convert(args[0], typeof(object)));
+                _result = L.Expression.GreaterThanOrEqual(r, L.Expression.Constant(0));
+                return;
+            }
+
+            //Context methods take precedence over built-in functions because they're user-customisable.
+            var mi = FindMethod(function.Identifier.Name, args);
+            if (mi != null) {
+                _result = L.Expression.Call(_context, mi.BaseMethodInfo, mi.PreparedArguments);
+                return;
+            }
+
+            switch (functionName)
+            {
                 case "min":
                 case "max":
                     var max_arg0 = args[0];
@@ -241,13 +249,13 @@ namespace NCalc
                     {
                         max_arg1 = L.Expression.Convert(max_arg1, max_arg0.Type);
                     }
-                    var maxMethod = GetMethodInfo(typeof(Math),funcName == "min" ? "Min" : "Max", new Type[] { args[0].Type, args[0].Type });
+                    var maxMethod = GetMethodInfo(typeof(Math), functionName == "min" ? "Min" : "Max", new Type[] { args[0].Type, args[0].Type });
                     _result = L.Expression.Call(maxMethod, max_arg0, max_arg1);
                     break;
                 case "pow":
-                    var pow_arg0 = L.Expression.Convert(args[0], typeof(double));
-                    var pow_arg1 = L.Expression.Convert(args[1], typeof(double));
-                    _result = L.Expression.Power(pow_arg0, pow_arg1);
+                    var powArg0 = L.Expression.Convert(args[0], typeof(double));
+                    var powArg1 = L.Expression.Convert(args[1], typeof(double));
+                    _result = L.Expression.Power(powArg0, powArg1);
                     break;
                 case "round":
                     var round_arg0 = args[0];
@@ -264,16 +272,14 @@ namespace NCalc
                 case "truncate":
                 case "floor":
                     var floor_args = L.Expression.Convert(args[0], typeof(double));
-                    var floor_method = funcName == "ceiling" ? _ceilingMethod : funcName == "truncate" ? _truncateMethod : _floorMethod;
+                    var floor_method = functionName == "ceiling" ? _ceilingMethod : functionName == "truncate" ? _truncateMethod : _floorMethod;
                     _result = L.Expression.Call(floor_method, floor_args);
                     break;
                
 
                 
                 default:
-                    var mi = FindMethod(function.Identifier.Name, args);
-                    _result = L.Expression.Call(_context, mi.BaseMethodInfo, mi.PreparedArguments);
-                    break;
+                    throw new MissingMethodException($"method not found: {functionName}");
             }
         }
 
@@ -291,6 +297,8 @@ namespace NCalc
 
         private ExtendedMethodInfo FindMethod(string methodName, L.Expression[] methodArgs) 
         {
+            if (_context == null) return null;
+
             TypeInfo contextTypeInfo = _context.Type.GetTypeInfo();
             TypeInfo objectTypeInfo = typeof(object).GetTypeInfo();
             do 
@@ -314,7 +322,7 @@ namespace NCalc
                 if (candidates.Any()) return candidates.OrderBy(method => method.Score).First();
                 contextTypeInfo = contextTypeInfo.BaseType.GetTypeInfo();
             } while (contextTypeInfo != objectTypeInfo);
-            throw new MissingMethodException($"method not found: {methodName}");
+            return null;
         }
 
         /// <summary>
@@ -358,7 +366,11 @@ namespace NCalc
                 if (argumentType != parameterType)
                 {
                     bool canCastImplicitly = TryCastImplicitly(argumentType, parameterType, ref argument);
-                    if (!canCastImplicitly) return null;
+                    if (!canCastImplicitly)
+                    {
+                        return null;
+                    }
+                    
                     functionMemberScore++;
                 }
                 if (!isParamsElement) 
@@ -380,11 +392,20 @@ namespace NCalc
 
         private bool TryCastImplicitly(Type from, Type to, ref L.Expression argument)
         {
+           
+            if (Nullable.GetUnderlyingType(to) == from)
+            {
+                argument = L.Expression.Convert(argument, to);
+                return true;
+            }
+
             bool convertingFromPrimitiveType = _implicitPrimitiveConversionTable.TryGetValue(from, out var possibleConversions);
-            if (!convertingFromPrimitiveType || !possibleConversions.Contains(to)) {
+            if (!convertingFromPrimitiveType || !possibleConversions.Contains(to))
+            {
                 argument = null;
                 return false;
             }
+
             argument = L.Expression.Convert(argument, to);
             return true;
         }

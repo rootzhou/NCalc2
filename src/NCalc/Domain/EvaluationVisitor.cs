@@ -1,11 +1,8 @@
 ﻿using System;
-using System.Collections;
 using System.Collections.Generic;
 
 namespace NCalc.Domain
 {
-
-
     public class EvaluationVisitor : LogicalExpressionVisitor
     {
         private delegate T Func<T>();
@@ -37,7 +34,7 @@ namespace NCalc.Domain
 
         private static Type[] CommonTypes = new[] { typeof(Int64), typeof(Double), typeof(Boolean), typeof(String), typeof(Decimal) };
 
-    /// <summary>
+        /// <summary>
         /// Gets the the most precise type.
         /// </summary>
         /// <param name="a">Type a.</param>
@@ -124,24 +121,28 @@ namespace NCalc.Domain
         {
             // simulate Lazy<Func<>> behavior for late evaluation
             object leftValue = null;
+            bool leftEvaluated = false;
             Func<object> left = () =>
                                  {
-                                     if (leftValue == null)
+                                     if (!leftEvaluated)
                                      {
                                          expression.LeftExpression.Accept(this);
                                          leftValue = Result;
+                                         leftEvaluated = true;
                                      }
                                      return leftValue;
                                  };
 
             // simulate Lazy<Func<>> behavior for late evaluation
             object rightValue = null;
+            bool rightEvaluated = false;
             Func<object> right = () =>
             {
-                if (rightValue == null)
+                if (!rightEvaluated)
                 {
                     expression.RightExpression.Accept(this);
                     rightValue = Result;
+                    rightEvaluated = true;
                 }
                 return rightValue;
             };
@@ -281,16 +282,16 @@ namespace NCalc.Domain
         public override void Visit(Function function)
         {
             var args = new FunctionArgs
-                           {
-                               Parameters = new Expression[function.Expressions.Length]
-                           };
+            {
+                Parameters = new Expression[function.Expressions.Length]
+            };
 
             // Don't call parameters right now, instead let the function do it as needed.
             // Some parameters shouldn't be called, for instance, in a if(), the "not" value might be a division by zero
             // Evaluating every value could produce unexpected behaviour
-            for (int i = 0; i < function.Expressions.Length; i++ )
+            for (int i = 0; i < function.Expressions.Length; i++)
             {
-                args.Parameters[i] =  new Expression(function.Expressions[i], _options);
+                args.Parameters[i] = new Expression(function.Expressions[i], _options);
                 args.Parameters[i].EvaluateFunction += EvaluateFunction;
                 args.Parameters[i].EvaluateParameter += EvaluateParameter;
 
@@ -308,10 +309,10 @@ namespace NCalc.Domain
                 return;
             }
 
-            switch (function.Identifier.Name.ToLower())
+            switch (function.Identifier.Name)
             {
                 #region Abs
-                case "abs":
+                case string n when n.Equals("abs", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Abs", function.Identifier.Name);
 
@@ -337,7 +338,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Acos
-                case "acos":
+                case string n when n.Equals("acos", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Acos", function.Identifier.Name);
 
@@ -351,7 +352,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Asin
-                case "asin":
+                case string n when n.Equals("asin", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Asin", function.Identifier.Name);
 
@@ -365,7 +366,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Atan
-                case "atan":
+                case string n when n.Equals("atan", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Atan", function.Identifier.Name);
 
@@ -379,7 +380,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Ceiling
-                case "ceiling":
+                case string n when n.Equals("ceiling", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Ceiling", function.Identifier.Name);
 
@@ -394,7 +395,7 @@ namespace NCalc.Domain
 
                 #region Cos
 
-                case "cos":
+                case string n when n.Equals("cos", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Cos", function.Identifier.Name);
 
@@ -408,7 +409,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Exp
-                case "exp":
+                case string n when n.Equals("exp", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Exp", function.Identifier.Name);
 
@@ -422,7 +423,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Floor
-                case "floor":
+                case string n when n.Equals("floor", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Floor", function.Identifier.Name);
 
@@ -436,7 +437,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region IEEERemainder
-                case "ieeeremainder":
+                case string n when n.Equals("ieeeremainder", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("IEEERemainder", function.Identifier.Name);
 
@@ -450,7 +451,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Log
-                case "log":
+                case string n when n.Equals("log", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Log", function.Identifier.Name);
 
@@ -464,7 +465,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Log10
-                case "log10":
+                case string n when n.Equals("log10", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Log10", function.Identifier.Name);
 
@@ -478,7 +479,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Pow
-                case "pow":
+                case string n when n.Equals("pow", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Pow", function.Identifier.Name);
 
@@ -492,7 +493,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Round
-                case "round":
+                case string n when n.Equals("round", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Round", function.Identifier.Name);
 
@@ -508,7 +509,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Sign
-                case "sign":
+                case string n when n.Equals("sign", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Sign", function.Identifier.Name);
 
@@ -522,7 +523,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Sin
-                case "sin":
+                case string n when n.Equals("sin", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Sin", function.Identifier.Name);
 
@@ -536,7 +537,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Sqrt
-                case "sqrt":
+                case string n when n.Equals("sqrt", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Sqrt", function.Identifier.Name);
 
@@ -550,7 +551,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Tan
-                case "tan":
+                case string n when n.Equals("tan", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Tan", function.Identifier.Name);
 
@@ -564,7 +565,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Truncate
-                case "truncate":
+                case string n when n.Equals("truncate", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Truncate", function.Identifier.Name);
 
@@ -578,7 +579,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Max
-                case "max":
+                case string n when n.Equals("max", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Max", function.Identifier.Name);
 
@@ -594,7 +595,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region Min
-                case "min":
+                case string n when n.Equals("min", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("Min", function.Identifier.Name);
 
@@ -610,7 +611,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region if
-                case "if":
+                case string n when n.Equals("if", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("if", function.Identifier.Name);
 
@@ -625,7 +626,7 @@ namespace NCalc.Domain
                 #endregion
 
                 #region in
-                case "in":
+                case string n when n.Equals("in", StringComparison.OrdinalIgnoreCase):
 
                     CheckCase("in", function.Identifier.Name);
 
@@ -662,7 +663,7 @@ namespace NCalc.Domain
         {
             if (IgnoreCase)
             {
-                if (function.ToLower() == called.ToLower())
+                if (function.Equals(called, StringComparison.OrdinalIgnoreCase))
                 {
                     return;
                 }

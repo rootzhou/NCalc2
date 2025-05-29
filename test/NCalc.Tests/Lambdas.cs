@@ -14,6 +14,8 @@ namespace NCalc.Tests
             public decimal? FieldD { get; set; }
             public int? FieldE { get; set; }
 
+            public DateTime? Year20220101 => new DateTime(2022,1,1);
+
             public int Test(int a, int b)
             {
                 return a + b;
@@ -29,14 +31,16 @@ namespace NCalc.Tests
                 return a + b + c;
             }
 
-            public double Test(double a, double b, double c) 
+            public double Test(double a, double b, double c)
             {
                 return a + b + c;
             }
 
-            public string Sum(string msg, params int[] numbers) {
+            public string Sum(string msg, params int[] numbers)
+            {
                 int total = 0;
-                foreach (var num in numbers) {
+                foreach (var num in numbers)
+                {
                     total += num;
                 }
                 return msg + total;
@@ -45,7 +49,8 @@ namespace NCalc.Tests
             public int Sum(params int[] numbers)
             {
                 int total = 0;
-                foreach (var num in numbers) {
+                foreach (var num in numbers)
+                {
                     total += num;
                 }
                 return total;
@@ -66,9 +71,29 @@ namespace NCalc.Tests
                 return obj1.Count1 + obj2.Count1;
             }
 
+            public double? DiffDays(DateTime? startDate, DateTime? endDate)
+            {
+                if (startDate == null || endDate == null)
+                {
+                    return null;
+                }
+
+                return (endDate.Value - startDate.Value).TotalDays;
+            }
+
             public int Sum(TestObject2 obj1, TestObject2 obj2)
             {
                 return obj1.Count2 + obj2.Count2;
+            }
+
+            public double Max(TestObject1 obj1, TestObject1 obj2)
+            {
+                return Math.Max(obj1.Count1, obj2.Count1);
+            }
+
+            public double Min(TestObject1 obj1, TestObject1 obj2)
+            {
+                return Math.Min(obj1.Count1, obj2.Count1);
             }
 
             public class TestObject1
@@ -93,27 +118,29 @@ namespace NCalc.Tests
             }
         }
 
-        private class SubContext : Context 
+        private class SubContext : Context
         {
-            public int Multiply(int a, int b) 
+            public int Multiply(int a, int b)
             {
                 return a * b;
             }
 
-            public new int Test(int a, int b) 
+            public new int Test(int a, int b)
             {
-                return base.Test(a,b) / 2;
+                return base.Test(a, b) / 2;
             }
 
-            public int Test(int a, int b, int c, int d) 
+            public int Test(int a, int b, int c, int d)
             {
                 return a + b + c + d;
             }
 
-            public int Sum(TestObject1 obj1, TestObject2 obj2, TestObject2 obj3) 
+            public int Sum(TestObject1 obj1, TestObject2 obj2, TestObject2 obj3)
             {
                 return obj1.Count1 + obj2.Count2 + obj3.Count2 + 100;
             }
+
+            public DateTime? NullDate => null;
         }
 
         [Theory]
@@ -196,7 +223,8 @@ namespace NCalc.Tests
         }
 
         [Fact]
-        public void ShouldHandleMixedParamsKeyword() {
+        public void ShouldHandleMixedParamsKeyword()
+        {
             var expression = new Expression("Sum('Your total is: ', Test(1,1), 2, 3)");
             var sut = expression.ToLambda<Context, string>();
             var context = new Context();
@@ -221,7 +249,7 @@ namespace NCalc.Tests
             var lambda2 = new Expression("Test(5, 5)").ToLambda<SubContext, int>();
             var lambda3 = new Expression("Test(1,2,3,4)").ToLambda<SubContext, int>();
             var lambda4 = new Expression("Sum(CreateTestObject1(100), CreateTestObject2(100), CreateTestObject2(100))").ToLambda<SubContext, int>();
-            
+
             var context = new SubContext();
             Assert.Equal(10, lambda1(context));
             Assert.Equal(5, lambda2(context));
@@ -233,7 +261,8 @@ namespace NCalc.Tests
         [InlineData("Test(1, 1, 1)")]
         [InlineData("Test(1.0, 1.0, 1.0)")]
         [InlineData("Test(1.0, 1, 1.0)")]
-        public void ShouldHandleImplicitConversion(string input) {
+        public void ShouldHandleImplicitConversion(string input)
+        {
             var lambda = new Expression(input).ToLambda<Context, int>();
 
             var context = new Context();
@@ -297,6 +326,20 @@ namespace NCalc.Tests
         }
 
         [Theory]
+        [InlineData("Min(CreateTestObject1(1), CreateTestObject1(2))", 1)]
+        [InlineData("Max(CreateTestObject1(1), CreateTestObject1(2))", 2)]
+        [InlineData("Min(1, 2)", 1)]
+        [InlineData("Max(1, 2)", 2)]
+        public void ShouldProritiseContextFunctions(string input, double expected)
+        {
+            var expression = new Expression(input);
+            var lambda = expression.ToLambda<Context, double>();
+            var context = new Context();
+            var actual = lambda(context);
+            Assert.Equal(expected, actual);
+        }
+
+        [Theory]
         [InlineData("[FieldA] > [FieldC]", true)]
         [InlineData("[FieldC] > 1.34", true)]
         [InlineData("[FieldC] > (1.34 * 2) % 3", false)]
@@ -312,7 +355,7 @@ namespace NCalc.Tests
         }
 
         [Theory]
-        [InlineData("Min(3,2)",2)]
+        [InlineData("Min(3,2)", 2)]
         [InlineData("Min(3.2,6.3)", 3.2)]
         [InlineData("Max(2.6,9.6)", 9.6)]
         [InlineData("Max(9,6)", 9)]
@@ -374,7 +417,7 @@ namespace NCalc.Tests
             // Assert
             Assert.Equal(expected, actual);
         }
-        
+
         // https://github.com/sklose/NCalc2/issues/54
         [Fact]
         public void Issue54()
@@ -392,6 +435,19 @@ namespace NCalc.Tests
 
             // Assert
             Assert.Equal(expected, actual);
+        }
+
+        [Theory]
+        [InlineData("DiffDays([Year20220101],[Year20220101])", 0)]
+        [InlineData("DiffDays(#2021/12/31#,[Year20220101])", 1.0)]
+        [InlineData("DiffDays([NullDate],[NullDate])", null)]
+        [InlineData("DiffDays(#2021/12/31#,#2022/01/02#)", 2)]
+        [InlineData("DiffDays(#2021/12/31#,[NullDate])", null)]
+        public void Date_Nullable_Test(string inputExp, double? result)
+        {
+            var expression = new Expression(inputExp);
+            var sut = expression.ToLambda<SubContext, double?>();
+            Assert.Equal(result, sut(new SubContext()));
         }
 
         internal struct FooStruct
